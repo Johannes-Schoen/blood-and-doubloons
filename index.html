@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>1714 - Blood and Doubloons</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: #041019;
+      color: #f4e8c1;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #gameContainer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #072235;
+    }
+    canvas { display: block; cursor: crosshair; }
+
+    .sprite-portrait { image-rendering: auto; border-radius: 3px; aspect-ratio: 4 / 3; }
+    .game-ui-icon {
+      display: inline-block; width: 1.28em; height: 1.28em; vertical-align: -0.24em;
+      background-repeat: no-repeat; background-size: 800% 800%;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.85)); pointer-events: none; margin-right: 1px;
+    }
+    .portrait-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+    @media (max-width: 760px) { .portrait-picker-grid { grid-template-columns: repeat(4, 1fr); } }
+    .portrait-picker-cell {
+      aspect-ratio: 4 / 3; border: 2px solid #475569; border-radius: 6px;
+      overflow: hidden; cursor: pointer; background: #0f172a;
+      transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+    }
+    .portrait-picker-cell:hover { border-color: #ffd700; transform: translateY(-2px) scale(1.03); }
+    .portrait-picker-cell.selected { border-color: #ffd700; box-shadow: 0 0 14px rgba(255, 215, 0, 0.55); transform: scale(1.04); }
+    .portrait-picker-cell.ghost-cell.selected { border-color: #10b981; box-shadow: 0 0 16px rgba(16, 185, 129, 0.65); }
+
+    #mainMenuOverlay {
+      position: absolute; inset: 0; background: #03070c;
+      display: flex; justify-content: center; align-items: center;
+      z-index: 50; padding: 20px; overflow: hidden;
+    }
+    #mainMenuOverlay.hidden { display: none !important; }
+
+    #menuBgWrap { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+    #menuBgGif { width: 100%; height: 100%; object-fit: cover; object-position: center center; animation: gentleMenuLoop 18s ease-in-out infinite alternate; }
+    #menuCampfireGlow {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(90deg, rgba(2, 6, 12, 0.88) 0%, rgba(2, 6, 12, 0.44) 32%, rgba(2, 6, 12, 0.0) 54%),
+        linear-gradient(180deg, rgba(2, 6, 12, 0.65) 0%, transparent 20%, transparent 82%, rgba(2, 6, 12, 0.72) 100%);
+    }
+    @keyframes gentleMenuLoop { 0% { transform: scale(1.01) translate(0px, 0px); } 100% { transform: scale(1.04) translate(-5px, -3px); } }
+
+    .menu-box {
+      position: relative; z-index: 2; background: rgba(12, 20, 29, 0.94); backdrop-filter: blur(6px);
+      border: 2.5px solid #d4af37; border-radius: 12px; padding: 22px 28px; width: 960px; max-width: 96%; max-height: 93vh;
+      overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.95);
+    }
+    .menu-box.title-screen-layout {
+      background: transparent; backdrop-filter: none; border: none; box-shadow: none;
+      width: 100vw; max-width: 100vw; height: 100vh; max-height: 100vh;
+      padding: 24px 38px 24px 38px; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden;
+    }
+    .clean-title-top { text-align: center; pointer-events: none; }
+    .clean-title-top h1 { color: #ffd700; font-size: clamp(26px, 3.2vw, 44px); font-weight: 900; letter-spacing: 2.5px; text-shadow: 0 4px 18px rgba(0,0,0,0.98); }
+    .clean-left-column { align-self: center; justify-self: start; width: 320px; max-width: 88vw; max-height: calc(100vh - 165px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
+    .clean-section-label { color: #d4af37; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 5px; text-shadow: 0 2px 6px #000; }
+    .clean-menu-btn {
+      width: 100%; background: rgba(10, 17, 26, 0.86); backdrop-filter: blur(4px); border: 1.5px solid #5a4628; color: #e2e8f0;
+      padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 12.5px; font-weight: bold; text-align: left;
+      display: flex; justify-content: space-between; align-items: center; transition: 0.15s ease; margin-bottom: 5px;
+    }
+    .clean-menu-btn:hover:not(:disabled) { border-color: #ffd700; background: rgba(36, 28, 16, 0.92); color: #ffd700; }
+    .clean-menu-btn.selected { border-color: #ffd700; border-left: 4px solid #ffd700; background: rgba(44, 33, 16, 0.94); color: #ffd700; }
+    .clean-slot-row { background: rgba(8, 14, 22, 0.86); border: 1px solid #3b4b5e; border-radius: 6px; padding: 6px 10px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 11.5px; }
+    .clean-slot-row.has-save { border-color: #8b6914; }
+    .clean-slot-info { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #cbd5e1; }
+    .clean-slot-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .clean-bottom-center { text-align: center; padding-bottom: 4px; }
+    .start-adventure-btn { background: linear-gradient(180deg, #165b33, #0e3d22); border: 2px solid #26804b; color: #f4e8c1; padding: 11px 38px; font-size: 15px; font-weight: 800; border-radius: 7px; cursor: pointer; box-shadow: 0 8px 26px rgba(0,0,0,0.9); }
+    .start-adventure-btn:hover { background: linear-gradient(180deg, #1e7543, #14522e); border-color: #ffd700; color: #fff; }
+
+    #introOverlay { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; justify-content: space-between; z-index: 9999; overflow: hidden; opacity: 1; transition: opacity 0.8s ease; cursor: pointer; }
+    #introOverlay.active { display: flex !important; }
+    #introOverlay.fading-out { opacity: 0; pointer-events: none; }
+    #introMediaWrap { position: absolute; inset: 0; z-index: 0; }
+    #introMediaWrap img { width: 100%; height: 100%; object-fit: cover; animation: introStormZoom 10s ease-out forwards; }
+    @keyframes introStormZoom { from { transform: scale(1.06); } to { transform: scale(1.0); } }
+    .intro-letterbox-top { position: relative; z-index: 2; height: 68px; background: linear-gradient(180deg, rgba(0,0,0,0.92) 45%, transparent 100%); display: flex; justify-content: flex-end; align-items: center; padding: 0 28px; }
+    .intro-letterbox-bottom { position: relative; z-index: 2; min-height: 140px; background: linear-gradient(0deg, rgba(0,0,0,0.94) 55%, transparent 100%); display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 22px 32px 30px; text-align: center; }
+    #introStoryText { max-width: 860px; color: #f8fafc; font-size: clamp(15px, 1.6vw, 20px); font-style: italic; line-height: 1.5; text-shadow: 0 2px 12px #000; transition: opacity 0.45s ease; }
+
+    .quiz-option { background: #101c28; border: 1px solid #6e512d; color: #f4e8c1; padding: 11px 14px; border-radius: 7px; margin-bottom: 9px; cursor: pointer; text-align: left; width: 100%; font-size: 13.5px; }
+    .quiz-option:hover { background: #2c2112; border-color: #ffd700; color: #ffd700; }
+    .lang-flag-bar { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 10px 0; }
+    .lang-btn { background: #0f172a; border: 2px solid #5a4628; color: #f8fafc; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; }
+    .lang-btn.active { border-color: #ffd700; background: #2c2112; color: #ffd700; }
+
+    #topHud { position: absolute; top: 8px; left: 8px; right: 8px; display: grid; grid-template-columns: minmax(250px, 310px) 1fr minmax(265px, 325px); align-items: start; pointer-events: none; z-index: 6; gap: 8px; }
+    .panel { background: linear-gradient(180deg, rgba(16, 26, 38, 0.95), rgba(8, 14, 22, 0.95)); border: 1.5px solid #c59b27; border-radius: 8px; padding: 7px 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.85); pointer-events: auto; }
+    .status-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 3px 7px; align-items: center; font-size: 11px; font-weight: bold; }
+    .bar-bg { width: 100%; min-width: 85px; height: 9px; background: #1b1111; border: 1px solid #8b6914; border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; width: 100%; transition: width 0.15s; }
+    #hullBar { background: linear-gradient(90deg, #c0392b, #2ecc71); }
+    #sailBar { background: linear-gradient(90deg, #2980b9, #f5f6fa); }
+    #crewBar { background: linear-gradient(90deg, #8e44ad, #f39c12); }
+    #moraleBar { background: linear-gradient(90deg, #e74c3c, #f1c40f, #2ecc71); }
+
+    .supply-bar { margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(184, 134, 11, 0.32); display: flex; align-items: center; font-size: 10.5px; gap: 4px; flex-wrap: wrap; }
+    .supply-pill { background: rgba(12, 20, 29, 0.88); border: 1px solid #5a4628; padding: 1px 5px; border-radius: 4px; font-weight: bold; }
+    .supply-pill.warn { border-color: #e74c3c; color: #ff7675; animation: pulseWarn 1.2s infinite; }
+    @keyframes pulseWarn { 0%, 100% { background: rgba(192, 57, 43, 0.15); } 50% { background: rgba(192, 57, 43, 0.45); } }
+
+    .cannon-status { margin-top: 5px; padding-top: 5px; border-top: 1px solid rgba(184, 134, 11, 0.32); display: flex; justify-content: space-between; gap: 8px; font-size: 10px; }
+    .pip-row { display: flex; gap: 2px; margin-top: 2px; flex-wrap: wrap; max-width: 115px; }
+    .pip { width: 7px; height: 7px; border-radius: 2px; border: 1px solid #d4af37; background: #2c3e50; }
+    .pip.ready { background: #2ecc71; box-shadow: 0 0 4px #2ecc71; }
+    .pip.loading { background: #e67e22; }
+    .pip.stowed { background: #475569; border-color: #64748b; opacity: 0.6; }
+    .pip.empty-port { background: #111827; border-color: #64748b; opacity: 0.4; }
+    .pip.unmanned { background: #3b0764; border-color: #a855f7; opacity: 0.7; }
+    .pip.damaged { background: #dc2626; border-color: #fca5a5; animation: pulseWarn 0.8s infinite; }
+
+    #centerHud { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+    .ammo-bar { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+    .mode-btn, .ammo-btn, .skill-btn { padding: 4px 6px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 10px; display: flex; flex-direction: column; align-items: center; min-width: 62px; }
+    .mode-btn { background: #143328; border: 1.5px solid #2ecc71; color: #a7f3d0; }
+    .mode-btn span.sub, .ammo-btn span.sub, .skill-btn span.sub { font-size: 8px; color: #94a3b8; font-weight: normal; margin-top: 1px; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mode-btn.combat { background: #3b1313; border-color: #ef4444; color: #fecaca; }
+    .ammo-btn { background: #121e2a; border: 1.5px solid #5a4628; color: #d4c49e; }
+    .ammo-btn.active, .skill-btn.active { border-color: #ffd700; background: #2c2214; color: #ffd700; }
+    .skill-btn { background: #1b2838; border: 1.5px solid #38bdf8; color: #e0f2fe; }
+    .skill-btn:disabled { border-color: #475569; color: #64748b; cursor: not-allowed; opacity: 0.65; }
+
+    #officerHudWrap { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
+    #officerHudBar { display: flex; gap: 5px; align-items: center; padding: 4px 7px; flex-wrap: wrap; justify-content: center; }
+    #officerHudBar.collapsed .hud-portrait-card:not(.captain) { display: none; }
+    .hud-portrait-card { display: flex; align-items: center; gap: 6px; background: rgba(8, 14, 22, 0.9); border: 1px solid #6e512d; border-radius: 5px; padding: 3px 6px; min-width: 120px; }
+    .hud-portrait-card.captain { border-color: #ffd700; cursor: pointer; }
+    .hud-portrait-card.assigned-cmd { border-color: #38bdf8; }
+
+    .portrait-box { width: 44px; height: 33px; aspect-ratio: 4 / 3; border-radius: 5px; border: 1.5px solid #d4af37; background: #162432; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .hud-off-info { display: flex; flex-direction: column; font-size: 9.5px; line-height: 1.18; overflow: hidden; }
+    .hud-off-name { color: #ffd700; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 82px; }
+    .hud-off-role { color: #38bdf8; font-size: 8.5px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 82px; }
+    .mini-morale-bg { width: 100%; height: 3px; background: #1e293b; border-radius: 2px; margin-top: 2px; overflow: hidden; }
+    .mini-morale-fill { height: 100%; background: #2ecc71; }
+
+    #fleetOrdersBar { display: none; gap: 5px; align-items: center; padding: 4px 8px; font-size: 10px; border-color: #38bdf8; flex-wrap: wrap; justify-content: center; }
+    #fleetOrdersBar.visible { display: flex; }
+    .fleet-cmd-btn { background: #0f172a; border: 1px solid #475569; color: #cbd5e1; padding: 3px 7px; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; }
+    .fleet-cmd-btn.active { background: #0c4a6e; border-color: #38bdf8; color: #fde047; }
+
+    #tutorialBanner, #hailRequestBanner {
+      display: none; background: linear-gradient(90deg, rgba(20, 42, 62, 0.96), rgba(15, 28, 42, 0.96));
+      border: 1.5px solid #ffd700; border-radius: 6px; padding: 5px 12px; font-size: 11.5px; color: #fef08a; max-width: 580px; text-align: center; pointer-events: auto;
+    }
+    #tutorialBanner.visible, #hailRequestBanner.visible { display: flex; align-items: center; justify-content: center; }
+
+    .stats-col { display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+    .stats-row { display: flex; justify-content: space-between; align-items: center; font-weight: bold; gap: 3px; flex-wrap: wrap; }
+    .rep-list { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 7px; font-size: 9.5px; border-top: 1px solid rgba(184, 134, 11, 0.32); padding-top: 4px; }
+    .rep-item { display: flex; justify-content: space-between; white-space: nowrap; }
+    #activeMissionHud { border-top: 1px solid rgba(184, 134, 11, 0.32); padding-top: 3px; font-size: 10px; color: #fde047; }
+
+    @media (max-width: 1420px) {
+      #topHud { grid-template-columns: 265px 1fr 275px; gap: 5px; }
+      .mode-btn span.sub, .ammo-btn span.sub, .skill-btn span.sub { display: none; }
+      .mode-btn, .ammo-btn, .skill-btn { min-width: 52px; padding: 4px 5px; }
+    }
+
+    #chatterBox { position: absolute; bottom: 132px; left: 20px; max-width: 420px; background: linear-gradient(180deg, rgba(18, 28, 40, 0.96), rgba(10, 16, 24, 0.96)); border: 2px solid #d4af37; border-radius: 8px; padding: 8px 12px; display: none; align-items: center; gap: 10px; z-index: 9; pointer-events: none; }
+    #chatterBox.visible { display: flex; }
+
+    #actionPromptsWrap { position: absolute; bottom: 104px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 8; flex-wrap: wrap; justify-content: center; }
+    .prompt-btn { background: linear-gradient(180deg, #1e293b, #0f172a); border: 2px solid #ffd700; padding: 8px 15px; border-radius: 8px; font-size: 13px; font-weight: bold; color: #ffd700; box-shadow: 0 0 25px rgba(255, 215, 0, 0.4); display: none; cursor: pointer; }
+    .prompt-btn.visible { display: block; }
+    .prompt-btn.board { border-color: #ef4444; color: #fecaca; background: linear-gradient(180deg, #450a0a, #1f0404); }
+    .prompt-btn.explore { border-color: #2ecc71; color: #a7f3d0; background: linear-gradient(180deg, #064e3b, #022c22); }
+    .prompt-btn.hideout { border-color: #a855f7; color: #e9d5ff; background: linear-gradient(180deg, #3b0764, #1e0536); }
+    .prompt-btn.enclave { border-color: #10b981; color: #6ee7b7; background: linear-gradient(180deg, #022c22, #064e3b); }
+    .prompt-btn.voodoo { border-color: #c084fc; color: #f3e8ff; background: linear-gradient(180deg, #3b0764, #140326); }
+    .prompt-btn.hail { border-color: #38bdf8; color: #e0f2fe; background: linear-gradient(180deg, #0c4a6e, #082f49); }
+
+    #proximityChatBar { position: absolute; bottom: 68px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; z-index: 7; background: rgba(8, 15, 24, 0.90); border: 1px solid #6e512d; padding: 4px 8px; border-radius: 7px; }
+    #proximityShoutInput { width: 260px; background: #040a12; border: 1px solid #475569; color: #f8fafc; padding: 4px 9px; border-radius: 4px; font-size: 11.5px; user-select: text; }
+    #proximityShoutInput:focus { outline: none; border-color: #ffd700; }
+    #micToggleBtn.active { border-color: #2ecc71; background: #064e3b; color: #a7f3d0; }
+
+    #eventLog { position: absolute; bottom: 36px; left: 50%; transform: translateX(-50%); background: rgba(8, 16, 24, 0.9); border: 1px solid #b8860b; padding: 4px 16px; border-radius: 6px; font-size: 12px; color: #f8fafc; pointer-events: none; z-index: 5; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
+    #controlsHintWrap { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; z-index: 6; }
+    #controlsHint { background: rgba(6, 12, 18, 0.88); border: 1px solid #6e512d; padding: 4px 12px; border-radius: 20px; font-size: 10px; color: #cbd5e1; white-space: nowrap; }
+    #controlsHint.hidden { display: none; }
+    #toggleControlsBtn { background: rgba(14, 24, 36, 0.92); border: 1px solid #d4af37; color: #ffd700; padding: 4px 9px; border-radius: 14px; font-size: 10px; font-weight: bold; cursor: pointer; }
+
+    .overlay { position: absolute; inset: 0; background: rgba(4, 10, 16, 0.80); display: none; flex-direction: column; justify-content: center; align-items: center; padding: 18px; z-index: 20; }
+    .overlay.active { display: flex; }
+    .modal-card { position: relative; background: #14202c; border: 3px solid #d4af37; border-radius: 10px; padding: 18px 22px; width: 1100px; max-width: 96%; max-height: 91vh; overflow-y: auto; box-shadow: 0 15px 45px rgba(0,0,0,0.95); transition: background-position 0.32s ease; }
+    .modal-card.scene-backed {
+      background-repeat: no-repeat !important;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.92);
+    }
+    .modal-card.scene-backed .modal-header {
+      background: linear-gradient(90deg, rgba(7, 13, 22, 0.86), rgba(14, 22, 34, 0.72));
+      backdrop-filter: blur(4px);
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(212, 175, 55, 0.45);
+    }
+    .modal-card.scene-backed .card-box {
+      background: rgba(9, 16, 26, 0.80) !important;
+      backdrop-filter: blur(5px);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    }
+    .modal-card.scene-backed .tab-btn {
+      background: rgba(10, 18, 28, 0.84);
+      backdrop-filter: blur(4px);
+    }
+    .modal-card.scene-backed .tab-btn.active {
+      background: rgba(54, 38, 16, 0.92);
+      border-color: #ffd700;
+      color: #ffd700;
+    }
+    .modal-card.scene-backed table.trade-table {
+      background: rgba(8, 14, 23, 0.82);
+      backdrop-filter: blur(4px);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .scene-caption-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(10, 18, 28, 0.85); border: 1px solid rgba(212, 175, 55, 0.55);
+      color: #fde68a; font-size: 11px; font-weight: bold; padding: 3px 10px;
+      border-radius: 14px; margin-bottom: 10px; letter-spacing: 0.3px;
+    }
+    .flag-badge {
+      display: inline-block; width: 18px; height: 12px; border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.45); vertical-align: -1px; margin-right: 3px;
+    }
+    .flag-de { background: linear-gradient(180deg, #111 33%, #dc2626 33%, #dc2626 66%, #facc15 66%); }
+    .flag-en { background: linear-gradient(90deg, #1e3a8a 38%, #dc2626 38%, #dc2626 62%, #1e3a8a 62%); }
+    .flag-es { background: linear-gradient(180deg, #dc2626 25%, #facc15 25%, #facc15 75%, #dc2626 75%); }
+    .flag-fr { background: linear-gradient(90deg, #1d4ed8 33%, #f8fafc 33%, #f8fafc 66%, #dc2626 66%); }
+    .relic-badge {
+      display: inline-block; background: linear-gradient(90deg, #78350f, #b45309);
+      border: 1px solid #ffd700; color: #fef08a; padding: 1px 7px; border-radius: 4px;
+      font-size: 10px; font-weight: bold; letter-spacing: 0.4px;
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #5a4628; padding-bottom: 10px; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
+    .tabs-bar { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .tab-btn { flex: 1; background: #0d161f; border: 2px solid #5a4628; color: #cbd5e1; padding: 7px 9px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 12px; }
+    .tab-btn.active { background: #2c2112; border-color: #ffd700; color: #ffd700; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .card-box { background: #0c141d; border: 1px solid #5a4628; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
+    .card-title { color: #ffd700; font-size: 13.5px; font-weight: bold; }
+    .card-desc { font-size: 11.5px; color: #94a3b8; margin: 5px 0 9px; line-height: 1.38; }
+    .trait-pos { color: #2ecc71; font-size: 11px; font-weight: bold; margin-bottom: 2px; }
+    .trait-neg { color: #ff7675; font-size: 11px; font-weight: bold; margin-bottom: 6px; }
+
+    .action-btn { background: #8b5a2b; color: #fff; border: 1px solid #d4af37; padding: 7px 11px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 11.5px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .action-btn:hover:not(:disabled) { background: #b8860b; color: #000; }
+    .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .action-btn.danger { background: #7f1d1d; border-color: #ef4444; }
+    .action-btn.danger:hover:not(:disabled) { background: #ef4444; color: #fff; }
+
+    .adventure-choice-btn { background: linear-gradient(180deg, #162636, #0d1824); border: 1.5px solid #d4af37; color: #f8fafc; padding: 11px 14px; border-radius: 7px; cursor: pointer; text-align: left; font-size: 13px; font-weight: bold; width: 100%; margin-bottom: 8px; }
+    .adventure-choice-btn:hover:not(:disabled) { background: #2c2112; border-color: #ffd700; color: #ffd700; }
+    .adventure-choice-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    table.trade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.trade-table th, table.trade-table td { padding: 6px 8px; border-bottom: 1px solid #263545; text-align: left; }
+    table.trade-table th { color: #ffd700; background: #0c141d; }
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+    .badge-norm { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
+
+    .sm-btn { background: #1e293b; border: 1px solid #d4af37; color: #f8fafc; padding: 3px 6px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 10px; margin-right: 1px; }
+    .sm-btn:hover:not(:disabled) { background: #d4af37; color: #000; }
+    .sm-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .primary-btn { background: #27ae60; color: #fff; border: 2px solid #2ecc71; padding: 8px 18px; font-size: 13.5px; font-weight: bold; border-radius: 6px; cursor: pointer; }
+    .primary-btn:hover:not(:disabled) { background: #2ecc71; }
+    .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .bj-card { width: 72px; height: 104px; background: linear-gradient(135deg, #ffffff, #e2e8f0); border: 2px solid #d4af37; border-radius: 8px; padding: 6px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 8px 18px rgba(0,0,0,0.65); animation: dealSlideIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .bj-card.hidden-card { background: repeating-linear-gradient(45deg, #1e293b, #1e293b 8px, #0f172a 8px, #0f172a 16px); color: #ffd700; align-items: center; justify-content: center; }
+    @keyframes dealSlideIn { from { opacity: 0; transform: translateY(-35px) scale(0.75) rotate(-8deg); } to { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); } }
+  </style>
+  <!-- Sauberes UMD-Browser-Bundle von jsDelivr (kein Buffer-Fehler!) -->
+  <script src="https://cdn.jsdelivr.net/npm/colyseus.js@^0.15.28/dist/colyseus.js" defer></script>
+</head>
+<body>
+
+<div id="gameContainer">
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="mainMenuOverlay">
+    <div id="menuBgWrap">
+      <img id="menuBgGif" src="menu.gif" alt="Menu Background">
+      <div id="menuCampfireGlow"></div>
+    </div>
+    <div class="menu-box title-screen-layout" id="mainMenuContent"></div>
+  </div>
+
+  <div id="introOverlay" onclick="skipGameIntro()">
+    <div id="introMediaWrap"><img id="introGifImg" src="intro.gif" alt="Storm Intro"></div>
+    <div class="intro-letterbox-top">
+      <button class="sm-btn" style="padding:6px 14px; font-size:12px; background:rgba(15,23,42,0.88);" id="skipIntroBtn" onclick="event.stopPropagation(); skipGameIntro();">⏭️ Überspringen [Esc / Leertaste]</button>
+    </div>
+    <div class="intro-letterbox-bottom"><div id="introStoryText"></div></div>
+  </div>
+
+  <div id="topHud">
+    <div class="panel">
+      <div class="status-grid">
+        <div id="hudLabelHull">🛡️ Rumpf:</div>
+        <div class="bar-bg"><div id="hullBar" class="bar-fill"></div></div>
+        <div id="hullText">280/280</div>
+
+        <div id="hudLabelSail">⛵ Segel:</div>
+        <div class="bar-bg"><div id="sailBar" class="bar-fill"></div></div>
+        <div id="sailText">100%</div>
+
+        <div id="hudLabelCrew">🏴‍☠️ Crew:</div>
+        <div class="bar-bg"><div id="crewBar" class="bar-fill"></div></div>
+        <div id="crewText">24/44</div>
+
+        <div id="hudLabelMorale">🍻 Moral:</div>
+        <div class="bar-bg"><div id="moraleBar" class="bar-fill"></div></div>
+        <div id="moraleText">76%</div>
+      </div>
+
+      <div class="supply-bar">
+        <div class="supply-pill" id="foodPill">🍖 <span id="foodText">8</span></div>
+        <div class="supply-pill" id="rumPill">🍾 <span id="rumText">6</span></div>
+        <div class="supply-pill" id="medPill">🍋 <span id="medText">2</span></div>
+        <div class="supply-pill" id="timberPill">🪵 <span id="timberText">4</span></div>
+        <div class="supply-pill" id="canvasPill">⛵ <span id="canvasText">3</span></div>
+        <div class="supply-pill" id="cannonSupplyPill">💣 <span id="cannonSupplyText">6/6</span></div>
+        <div class="supply-pill" id="woundedPill" style="display:none;">🩸 <span id="woundedText">0</span></div>
+        <div class="supply-pill" id="firePill" style="display:none; cursor:pointer;" onclick="extinguishShipFire()">🔥 [X]</div>
+        <div class="supply-pill" id="diseasePill" style="display:none;">☣️ <span id="diseaseText">Gesund</span></div>
+        <div style="color:#94a3b8; font-size:9.5px;" id="supplyDaysText">~10T</div>
+      </div>
+
+      <div class="cannon-status">
+        <div>
+          <div><strong id="hudLabelPortSide">Backbord (Q)</strong></div>
+          <div id="portPips" class="pip-row"></div>
+        </div>
+        <div>
+          <div><strong id="hudLabelStbdSide">Steuerbord (E)</strong></div>
+          <div id="stbdPips" class="pip-row"></div>
+        </div>
+        <div style="text-align:right; min-width:86px;">
+          <div id="sailStageText" style="color:#ffd700; font-weight:bold; font-size:10.5px;">Halbe Fahrt</div>
+          <div id="knotsText" style="color:#94a3b8; font-size:9.5px;">0.0 kn</div>
+          <div id="regionText" style="color:#38bdf8; font-size:9px; margin-top:1px; max-width:95px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Offene See</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="centerHud">
+      <div class="panel ammo-bar">
+        <button class="mode-btn" id="modeBtn" onclick="toggleCombatMode()">
+          <span id="modeTitle">🧭 [C] Reise</span><span class="sub" id="modeSub">+18% Tempo</span>
+        </button>
+        <button class="mode-btn" id="fireCadenceBtn" onclick="toggleFireCadence()" style="border-color:#f59e0b; color:#fde047; background:#2c1d0c;">
+          <span id="fireCadenceTitle">💥 [N] Einzel</span><span class="sub" id="fireCadenceSub">Gezielt</span>
+        </button>
+        <button class="ammo-btn active" id="ammoBtn1" onclick="selectAmmo('round')">
+          <span id="ammoTitle1">[1] Voll</span><span class="sub" id="ammoSub1">Rumpf</span>
+        </button>
+        <button class="ammo-btn" id="ammoBtn2" onclick="selectAmmo('chain')">
+          <span id="ammoTitle2">[2] Kette</span><span class="sub" id="ammoSub2">Segel</span>
+        </button>
+        <button class="ammo-btn" id="ammoBtn3" onclick="selectAmmo('grape')">
+          <span id="ammoTitle3">[3] Schrot</span><span class="sub" id="ammoSub3">Nahkampf</span>
+        </button>
+        <button class="skill-btn" id="skillBtn4" onclick="useOfficerSkill('salvo')" disabled>
+          <span id="skillTitle4">[4] Salve</span><span class="sub" id="skillSub4">🔒</span>
+        </button>
+        <button class="skill-btn" id="skillBtn5" onclick="useOfficerSkill('repair')" disabled>
+          <span id="skillTitle5">[5] Not-Rep.</span><span class="sub" id="skillSub5">🔒</span>
+        </button>
+        <button class="skill-btn" id="equipBtnR" onclick="useSpecialEquipmentAction()" disabled>
+          <span id="equipTitleR">⚙️ [R]</span><span class="sub" id="equipSubR">—</span>
+        </button>
+        <button class="skill-btn" id="spyglassBtn" onclick="toggleSpyglass()" style="border-color:#d4af37; color:#fde68a;">
+          <span id="spyglassTitle">🔭 [Z] Fernglas</span><span class="sub" id="spyglassSub">Schiffe &amp; Wunder</span>
+        </button>
+        <button class="skill-btn" id="flagBtn" onclick="cycleFalseFlag()">
+          <span id="flagTitle">🏴‍☠️ [T] Flagge</span><span class="sub" id="flagSub">Echt</span>
+        </button>
+      </div>
+
+      <div id="officerHudWrap">
+        <div class="panel" id="officerHudBar"></div>
+        <button class="sm-btn" style="pointer-events:auto; padding:5px 7px;" onclick="toggleOfficerHudCollapse()" id="collapseOffBtn">👥▾</button>
+      </div>
+
+      <div class="panel" id="fleetOrdersBar">
+        <span style="color:#38bdf8; font-weight:bold;" id="fleetOrderLabel">⛵ Flotte:</span>
+        <button class="fleet-cmd-btn active" id="fCmd_form" onclick="setFleetOrder('formation')">🛡️ Formation</button>
+        <button class="fleet-cmd-btn" id="fCmd_attack" onclick="setFleetOrder('attack')">⚔️ Ziel angreifen</button>
+        <button class="fleet-cmd-btn" id="fCmd_cover" onclick="setFleetOrder('cover')">💨 Flucht decken</button>
+        <span style="color:#94a3b8; margin-left:4px;">|</span>
+        <button class="fleet-cmd-btn active" id="fAmmo_round" onclick="setFleetAmmo('round')">💣 Voll</button>
+        <button class="fleet-cmd-btn" id="fAmmo_chain" onclick="setFleetAmmo('chain')">⛓️ Kette</button>
+        <button class="fleet-cmd-btn" id="fAmmo_grape" onclick="setFleetAmmo('grape')">🧨 Schrot</button>
+      </div>
+
+      <div id="hailRequestBanner"></div>
+      <div id="tutorialBanner"></div>
+    </div>
+
+    <div class="panel stats-col">
+      <div class="stats-row">
+        <div>🪙 <span id="goldText" style="color:#ffd700;">380</span></div>
+        <div>📦 <span id="cargoText">12/65</span></div>
+        <div>⛵ <span id="fleetCountText" style="color:#38bdf8;">1/3</span></div>
+        <div id="repPersonalHud">☠️ 0</div>
+        <div id="clockText" style="color:#fde047;">☀️ 12:00</div>
+      </div>
+      <div class="stats-row">
+        <button class="sm-btn" onclick="toggleShipInventoryModal()" id="shipInvBtnHud" title="Schiffs- & Kapitäns-Inventar, Crew-Regler & Rationen (Taste I)">🧰 (I)</button>
+        <button class="sm-btn" onclick="toggleCaptainModal()" id="capBtnHud">⚓ Lv.1 (K)</button>
+        <button class="sm-btn" onclick="toggleWorldMap()" id="mapBtnHud">🗺️ (M)</button>
+        <button class="sm-btn" onclick="toggleLogbookModal()" id="logBtnHud">📖 (L)</button>
+        <button class="sm-btn" onclick="adjustZoom(0.15)">🔍+</button>
+        <button class="sm-btn" onclick="adjustZoom(-0.15)">🔍-</button>
+        <button class="sm-btn" onclick="toggleAudioMute()" id="muteBtnHud">🔊</button>
+        <button class="sm-btn" onclick="openOptionsModal()" id="optBtnHud">⚙️</button>
+        <button class="sm-btn" onclick="openMainMenu()">☰</button>
+      </div>
+      <div class="rep-list" id="repList"></div>
+      <div id="activeMissionHud">📜 Freier Kapitän</div>
+    </div>
+  </div>
+
+  <div id="chatterBox">
+    <div class="portrait-box" id="chatterPortrait" style="width:56px; height:42px; aspect-ratio:4/3;"></div>
+    <div>
+      <div id="chatterSpeaker" style="color:#ffd700; font-size:11.5px; font-weight:bold;">Bootsmann</div>
+      <div id="chatterText" style="color:#f8fafc; font-size:12px; font-style:italic;"></div>
+    </div>
+  </div>
+
+  <div id="actionPromptsWrap">
+    <div id="dockPrompt" class="prompt-btn" onclick="openPortModal()">⚓ Hafen anlaufen [F]</div>
+    <div id="villagePrompt" class="prompt-btn explore" onclick="openVillageModal()">🐟 Küstendorf anlaufen [F]</div>
+    <div id="hideoutPrompt" class="prompt-btn hideout" onclick="openHideoutModal()">🏗️ Küsten-Bauplatz [F / H]</div>
+    <div id="enclavePrompt" class="prompt-btn enclave" onclick="openEnclaveModal()">👻 Geisterpiraten-Enklave [F]</div>
+    <div id="siegePrompt" class="prompt-btn board" onclick="startFortSiegeBoarding()">🏰 Sturmreife Festung angreifen [V]</div>
+    <div id="boardPrompt" class="prompt-btn board" onclick="startBoardingCombat()">⚔️ Schiff entern [B]</div>
+    <div id="hailPrompt" class="prompt-btn hail" onclick="requestCaptainHail()">📯 Kontaktanfrage senden [U]</div>
+    <div id="explorePrompt" class="prompt-btn explore" onclick="openLandExploration()">🏝️ Beiboot / Landgang [G]</div>
+  </div>
+
+  <div id="proximityChatBar">
+    <input id="proximityShoutInput" type="text" maxlength="90" placeholder="📣 Nachricht per Sprachrohr rufen [Enter]...">
+    <button class="sm-btn" id="shoutSendBtn" onclick="sendProximityShout()">📣 Rufen</button>
+    <button class="sm-btn" id="micToggleBtn" onclick="VoiceChatManager.toggleMic()">🎙️ Stumm</button>
+  </div>
+
+  <div id="eventLog">⚓ 1714 - Blood and Doubloons</div>
+
+  <div id="controlsHintWrap">
+    <div id="controlsHint"></div>
+    <button id="toggleControlsBtn" onclick="toggleControlsHint()">⌨️ Tipps</button>
+  </div>
+
+  <!-- SCHIFFS- & KAPITÄNS-INVENTAR OVERLAY [Taste I] -->
+  <div id="shipInvOverlay" class="overlay" style="z-index:42;">
+    <div class="modal-card" style="width:1020px;">
+      <div class="modal-header">
+        <h1 style="color:#ffd700; font-size:22px;">🧰 Schiffs- &amp; Kapitäns-Inventar</h1>
+        <button class="primary-btn" onclick="toggleShipInventoryModal()">Schließen (I / Esc)</button>
+      </div>
+      <div id="shipInvBody"></div>
+    </div>
+  </div>
+
+  <!-- GAME OVER OVERLAY -->
+  <div id="gameOverOverlay" class="overlay" style="z-index:85; background:rgba(2, 4, 8, 0.94);">
+    <div class="modal-card" style="width:680px; border-color:#ef4444;">
+      <div id="gameOverBody"></div>
+    </div>
+  </div>
+
+  <!-- MULTIPLAYER & LIGA-ARENA OVERLAY -->
+  <div id="mpLobbyOverlay" class="overlay" style="z-index:65;">
+    <div class="modal-card" style="width:980px;">
+      <div class="modal-header">
+        <h1 style="color:#38bdf8; font-size:22px;">🌐 Mehrspieler &amp; Arena-Auswahl</h1>
+        <button class="primary-btn" onclick="closeMultiplayerLobby()">Schließen (Esc)</button>
+      </div>
+      <div id="mpLobbyBody"></div>
+    </div>
+  </div>
+
+  <div id="portOverlay" class="overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h1 id="portTitle" style="color:#ffd700; font-size:23px;">⚓ Hafen</h1>
+          <div id="portSubtitle" style="font-size:12.5px; color:#94a3b8;"></div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:13.5px; font-weight:bold;">
+            🪙 <span id="portGold" style="color:#ffd700;">0</span> &nbsp;|&nbsp;
+            📦 <span id="portCargo">0 / 60</span> &nbsp;|&nbsp;
+            🪵 <span id="portTimber">0</span> &nbsp;|&nbsp;
+            ⛵ <span id="portCanvas">0</span> &nbsp;|&nbsp;
+            🍖 <span id="portFood">0</span> &nbsp;|&nbsp;
+            🍾 <span id="portRum">0</span> &nbsp;|&nbsp;
+            ⛓️ <span id="portPrisoners">0</span>
+          </div>
+          <div style="font-size:11.5px; color:#cbd5e1; margin-top:5px;" id="portSpecialInfo"></div>
+        </div>
+      </div>
+
+      <div class="tabs-bar">
+        <button class="tab-btn active" id="tabBtn_shipyard" onclick="switchPortTab('shipyard')">🔨 Werft &amp; Dock</button>
+        <button class="tab-btn" id="tabBtn_armory" onclick="switchPortTab('armory')">⚔️ Bewaffnung</button>
+        <button class="tab-btn" id="tabBtn_market" onclick="switchPortTab('market')">⚖️ Kontor</button>
+        <button class="tab-btn" id="tabBtn_tavern" onclick="switchPortTab('tavern')">🍺 Taverne &amp; Gilde</button>
+        <button class="tab-btn" id="tabBtn_gov" onclick="switchPortTab('gov')">📜 Gouverneur</button>
+      </div>
+
+      <div id="tab_shipyard" class="tab-content active"></div>
+      <div id="tab_armory" class="tab-content"></div>
+      <div id="tab_market" class="tab-content"></div>
+      <div id="tab_tavern" class="tab-content"></div>
+      <div id="tab_gov" class="tab-content"></div>
+
+      <div style="margin-top:16px; text-align:right; border-top:1px solid #334155; padding-top:12px;">
+        <button class="primary-btn" id="btnClosePort" onclick="closePortModal()">⛵ Anker lichten &amp; Auslaufen</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="optionsOverlay" class="overlay" style="z-index:60;">
+    <div class="modal-card" style="width:820px;">
+      <div class="modal-header">
+        <h1 style="color:#ffd700; font-size:22px;" id="optionsModalTitle">⚙️ Optionen</h1>
+        <button class="primary-btn" id="optionsCloseBtn" onclick="closeOptionsModal()">Schließen (Esc)</button>
+      </div>
+      <div id="optionsBody"></div>
+    </div>
+  </div>
+
+  <div id="logbookOverlay" class="overlay" style="z-index:30;">
+    <div class="modal-card" style="width:940px;">
+      <div class="modal-header">
+        <h1 style="color:#ffd700; font-size:22px;" id="logbookTitle">📖 Kapitäns-Logbuch</h1>
+        <button class="primary-btn" onclick="toggleLogbookModal()">Schließen (L / Esc)</button>
+      </div>
+      <div id="logbookBody"></div>
+    </div>
+  </div>
+
+  <div id="enclaveOverlay" class="overlay" style="z-index:30;">
+    <div class="modal-card" style="width:1040px; border-color:#10b981; background:#041511;">
+      <div class="modal-header" style="border-bottom-color:#065f46;">
+        <h1 style="color:#34d399; font-size:22px;" id="enclaveTitle">👻 Geisterpiraten-Enklave</h1>
+        <button class="primary-btn" style="background:#059669; border-color:#34d399;" onclick="closeEnclaveModal()">Segel setzen (Esc)</button>
+      </div>
+      <div id="enclaveBody"></div>
+    </div>
+  </div>
+
+  <div id="blackjackOverlay" class="overlay" style="z-index:35;">
+    <div class="modal-card" style="width:760px;">
+      <div class="modal-header">
+        <h1 style="color:#2ecc71; font-size:22px;" id="bjModalTitle">🃏 Karibik-Blackjack</h1>
+        <button class="primary-btn" id="bjLeaveBtn" onclick="closeBlackjackModal()">Tisch verlassen</button>
+      </div>
+      <div id="blackjackBody"></div>
+    </div>
+  </div>
+
+  <div id="zilchOverlay" class="overlay" style="z-index:35;">
+    <div class="modal-card" style="width:760px;">
+      <div class="modal-header">
+        <h1 style="color:#ffd700; font-size:22px;" id="zilchModalTitle">🎲 Zilch</h1>
+        <button class="primary-btn" id="zilchLeaveBtn" onclick="closeZilchModal()">Tisch verlassen</button>
+      </div>
+      <div id="zilchBody"></div>
+    </div>
+  </div>
+
+  <div id="villageOverlay" class="overlay">
+    <div class="modal-card" style="width:940px;">
+      <div class="modal-header">
+        <h1 style="color:#2ecc71; font-size:22px;" id="villageTitle">🐟 Fischerdorf</h1>
+        <button class="primary-btn" onclick="closeVillageModal()">Segel setzen (Esc)</button>
+      </div>
+      <div id="villageBody"></div>
+    </div>
+  </div>
+
+  <div id="talkOverlay" class="overlay">
+    <div class="modal-card" style="width:820px;">
+      <div class="modal-header">
+        <h1 style="color:#38bdf8; font-size:22px;" id="talkTitle">🗣️ Unterhaltung</h1>
+        <button class="primary-btn" onclick="closeCaptainTalkModal()">Weitersegeln (Esc)</button>
+      </div>
+      <div id="talkBody"></div>
+    </div>
+  </div>
+
+  <div id="boardingOverlay" class="overlay">
+    <div class="modal-card" style="width:980px;">
+      <div class="modal-header">
+        <h1 style="color:#ef4444; font-size:22px;" id="boardingTitle">⚔️ Enterschlacht!</h1>
+        <div id="boardingRoundText" style="color:#ffd700; font-weight:bold;">#1</div>
+      </div>
+      <canvas id="boardingAnimCanvas" width="920" height="230" style="width:100%; height:230px; border:2px solid #d4af37; border-radius:8px; background:#09131c; margin-bottom:12px;"></canvas>
+      <div id="boardingBody"></div>
+    </div>
+  </div>
+
+  <div id="exploreOverlay" class="overlay">
+    <div class="modal-card" style="width:920px;">
+      <div class="modal-header">
+        <h1 style="color:#2ecc71; font-size:22px;" id="exploreTitle">🏝️ Landgang &amp; Schatzsuche</h1>
+        <button class="primary-btn" id="exploreCloseBtn" onclick="closeLandExploration()">Zurück aufs Schiff (Esc)</button>
+      </div>
+      <div id="exploreBody"></div>
+    </div>
+  </div>
+
+  <div id="hideoutOverlay" class="overlay">
+    <div class="modal-card" style="width:1080px;">
+      <div class="modal-header">
+        <h1 style="color:#a855f7; font-size:22px;" id="hideoutTitle">🏴‍☠️ Kolonie-Basis</h1>
+        <button class="primary-btn" onclick="closeHideoutModal()">Segel setzen (Esc)</button>
+      </div>
+      <div id="hideoutBody"></div>
+    </div>
+  </div>
+
+  <div id="captainOverlay" class="overlay">
+    <div class="modal-card" style="width:1040px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="portrait-box" id="capModalPortrait" style="width:76px; height:57px; aspect-ratio:4/3;"></div>
+          <div>
+            <h1 style="color:#ffd700; font-size:22px;" id="capModalTitle">Kapitän</h1>
+            <div style="font-size:12.5px; color:#38bdf8;" id="capModalSub"></div>
+          </div>
+        </div>
+        <button class="primary-btn" onclick="toggleCaptainModal()">Schließen (K / Esc)</button>
+      </div>
+      <div id="captainModalBody"></div>
+    </div>
+  </div>
+
+  <div id="mapOverlay" class="overlay">
+    <div class="modal-card" style="width:880px; text-align:center;">
+      <div class="modal-header">
+        <h1 style="color:#ffd700; font-size:22px;" id="mapModalTitle">🗺️ Seekarte der Karibik (1714)</h1>
+        <button class="primary-btn" onclick="toggleWorldMap()">Schließen (M / Esc)</button>
+      </div>
+      <canvas id="bigMapCanvas" width="820" height="540" style="border:2px solid #b8860b; border-radius:6px; background:#051c2c; cursor:crosshair;"></canvas>
+      <div style="font-size:12px; color:#cbd5e1; margin-top:8px;" id="mapFooterHint"></div>
+    </div>
+  </div>
+</div>
+
+<script src="portraits.js"></script>
+<script src="scene_bgs.js"></script>
+<script src="i18n.js"></script>
+<script src="audio.js"></script>
+<script src="data.js"></script>
+<script src="psychotest.js"></script>
+<script src="ship_captain_inv.js"></script>
+<script src="adventures_voodoo.js"></script>
+<script src="hideout_logbook.js"></script>
+<script src="spyglass_chat.js"></script>
+<script src="mp_client.js"></script>
+<script src="menu_save.js"></script>
+<script src="port_ui.js"></script>
+<script src="boarding_land.js"></script>
+<script src="world_render.js"></script>
+<script src="engine_init.js"></script>
+<script src="engine_sim.js"></script>
+<script src="engine_loop.js"></script>
+</body>
+</html>
